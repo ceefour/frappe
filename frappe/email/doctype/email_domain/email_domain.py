@@ -17,6 +17,8 @@ class EmailDomain(Document):
 
 	def validate(self):
 		"""Validate email id and check POP3/IMAP and SMTP connections is enabled."""
+                logger = frappe.logger()
+
 		if self.email_id:
 			validate_email_address(self.email_id, True)
 
@@ -26,19 +28,24 @@ class EmailDomain(Document):
 		if not frappe.local.flags.in_install and not frappe.local.flags.in_patch:
 			try:
 				if self.use_imap:
+                                        logger.info('Checking incoming IMAP email server {host}:{port} ssl={ssl}...'.format(
+                                                host=self.email_server, port=get_port(self), ssl=self.use_ssl))
 					if self.use_ssl:
 						test = imaplib.IMAP4_SSL(self.email_server, port=get_port(self))
 					else:
 						test = imaplib.IMAP4(self.email_server, port=get_port(self))
 
 				else:
+                                        logger.info('Checking incoming POP3 email server {host}:{port} ssl={ssl}...'.format(
+                                                host=self.email_server, port=get_port(self), ssl=self.use_ssl))
 					if self.use_ssl:
 						test = poplib.POP3_SSL(self.email_server, port=get_port(self))
 					else:
 						test = poplib.POP3(self.email_server, port=get_port(self))
 
 			except Exception:
-				frappe.throw(_("Incoming email account not correct"))
+                                logger.warn('Incoming email account not correct', exc_info=e)
+                                frappe.throw(title=_("Incoming email account not correct"), msg=str(e))
 
 			finally:
 				try:
@@ -54,15 +61,20 @@ class EmailDomain(Document):
 					if not self.get('smtp_port'):
 						self.smtp_port = 465
 
+                                        logger.info('Checking outgoing SMTPS email server {host}:{port}...'.format(
+                                                host=self.smtp_server, port=self.smtp_port))
 					sess = smtplib.SMTP_SSL((self.smtp_server or "").encode('utf-8'),
 							cint(self.smtp_port) or None)
 				else:
 					if self.use_tls and not self.smtp_port:
 						self.smtp_port = 587
+                                        logger.info('Checking outgoing SMTP email server {host}:{port} TLS={tls}...'.format(
+                                                host=self.smtp_server, port=self.get('smtp_port'), tls=self.use_tls))
 					sess = smtplib.SMTP(cstr(self.smtp_server or ""), cint(self.smtp_port) or None)
 				sess.quit()
 			except Exception:
-				frappe.throw(_("Outgoing email account not correct"))
+                                logger.warn('Outgoing email account not correct', exc_info=e)
+                                frappe.throw(title=_("Outgoing email account not correct"), msg=str(e))
 
 	def on_update(self):
 		"""update all email accounts using this domain"""
